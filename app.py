@@ -92,8 +92,6 @@ HTML_TEMPLATE = """
                         <div class="result success">
                             <h3>✅ 成功!</h3>
                             <p>${result.message}</p>
-                            <h4>Gemini 原始输出:</h4>
-                            <pre>${escapeHtml(result.raw_response)}</pre>
                             <h4>提取并修复后的 Patch:</h4>
                             <pre>${escapeHtml(result.patch_content)}</pre>
                         </div>`;
@@ -170,7 +168,7 @@ def generate_patch():
         full_prompt = f"""
 User Request: {user_prompt}
 
-File to be patched: `{file_path}`
+File to be patched: `{os.path.basename(file_path)}`
 File content:
 {file_content}
 Please generate the patch file now.
@@ -214,6 +212,8 @@ Please generate the patch file now.
                 text=True,
             )
             print("fix_patch.py output:", fix_process.stdout)
+            with open(temp_patch_filename, 'w', encoding="utf-8") as f:
+                f.write(fix_process.stdout)
 
             # 7. Git Apply
             # 必须在文件的父目录运行 git apply
