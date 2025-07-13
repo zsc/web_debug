@@ -120,7 +120,7 @@ HTML_TEMPLATE = """
                  .replace(/&/g, "&")
                  .replace(/</g, "<")
                  .replace(/>/g, ">")
-                 .replace(/"/g, """)
+                 .replace(/"/g, "\"")
                  .replace(/'/g, "'");
         }
     </script>
@@ -130,28 +130,38 @@ HTML_TEMPLATE = """
 
 # --- 3. 后端逻辑 ---
 
-@app.route('/')
+
+@app.route("/")
 def index():
     """提供主页面"""
     return render_template_string(HTML_TEMPLATE)
 
-@app.route('/generate_patch', methods=['POST'])
+
+@app.route("/generate_patch", methods=["POST"])
 def generate_patch():
     """处理生成和应用patch的请求"""
     data = request.json
-    file_path = data.get('file_path')
-    model_name = data.get('model')
-    user_prompt = data.get('prompt')
+    file_path = data.get("file_path")
+    model_name = data.get("model")
+    user_prompt = data.get("prompt")
 
     if not all([file_path, model_name, user_prompt]):
-        return jsonify({'status': 'error', 'message': '所有字段都是必填的。'}), 400
+        return jsonify({"status": "error", "message": "所有字段都是必填的。"}), 400
 
     if not os.path.exists(file_path) or not os.path.isfile(file_path):
-        return jsonify({'status': 'error', 'message': f'文件未找到或不是一个有效文件: {file_path}'}), 400
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": f"文件未找到或不是一个有效文件: {file_path}",
+                }
+            ),
+            400,
+        )
 
     try:
         # 1. 读取文件内容
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             file_content = f.read()
 
         # 2. 构建 Prompt
@@ -161,22 +171,21 @@ def generate_patch():
             "The patch should ONLY contain the changes required to fulfill the request. "
             "Output ONLY the patch content inside a single ```diff ... ``` code block."
         )
-        
+
         full_prompt = f"""
 User Request: {user_prompt}
 
 File to be patched: `{file_path}`
 File content:
 {file_content}
-Please generate the patch file now."""
 Please generate the patch file now.
 """
-        
+
         # 3. 调用 Gemini API (严格按照指定格式)
         # 注意: 当前Python SDK的推荐用法是 genai.GenerativeModel(...)
         # 但我们会严格遵循您请求的参数结构, 将其传入 GenerationConfig。
         model = genai.GenerativeModel(model_name)
-        
+
         # 严格遵循请求的参数格式
         generation_config = types.GenerationConfig(
             # max_output_tokens=8192, # 可选, 设定一个较大的值
@@ -200,33 +209,43 @@ Please generate the patch file now.
         # 4. 提取 Patch 内容
         match = re.search(r"```(?:diff|patch)\n(.*?)```", raw_response_text, re.DOTALL)
         if not match:
-            return jsonify({
-                'status': 'error',
-                'message': 'Gemini未能生成有效的patch格式 (未找到 ```diff...``` 块)。',
-                'raw_response': raw_response_text
-            }), 500
-        
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Gemini未能生成有效的patch格式 (未找到 ```diff...``` 块)。",
+                        "raw_response": raw_response_text,
+                    }
+                ),
+                500,
+            )
+
         patch_content = match.group(1)
-        
+
         # 5. 保存并处理 patch 文件
         temp_patch_filename = f"temp_{uuid.uuid4()}.patch"
-        with open(temp_patch_filename, 'w', encoding='utf-8') as f:
+        with open(temp_patch_filename, "w", encoding="utf-8") as f:
             f.write(patch_content)
-            
+
         try:
             # 6. 运 fix_patch.py
             fix_process = subprocess.run(
-                ['python', 'fix_patch.py', temp_patch_filename],
-                check=True, capture_output=True, text=True
+                ["python", "fix_patch.py", temp_patch_filename],
+                check=True,
+                capture_output=True,
+                text=True,
             )
             print("fix_patch.py output:", fix_process.stdout)
-            
+
             # 7. Git Apply
             # 必须在文件的父目录运行 git apply
             file_dir = os.path.dirname(os.path.abspath(file_path))
             apply_process = subprocess.run(
-                ['git', 'apply', os.path.abspath(temp_patch_filename)],
-                cwd=file_dir, check=True, capture_output=True, text=True
+                ["git", "apply", os.path.abspath(temp_patch_filename)],
+                cwd=file_dir,
+                check=True,
+                capture_output=True,
+                text=True,
             )
             print("git apply output:", apply_process.stdout)
 
@@ -235,19 +254,22 @@ Please generate the patch file now.
             if os.path.exists(temp_patch_filename):
                 os.remove(temp_patch_filename)
 
-        return jsonify({
-            'status': 'success',
-            'message': f'Patch 已成功应用到 {file_path}',
-            'raw_response': raw_response_text,
-            'patch_content': patch_content
-        })
+        return jsonify(
+            {
+                "status": "success",
+                "message": f"Patch 已成功应用到 {file_path}",
+                "raw_response": raw_response_text,
+                "patch_content": patch_content,
+            }
+        )
 
     except subprocess.CalledProcessError as e:
         error_message = f"命令执行失败: {e.cmd}\n返回码: {e.returncode}\n输出:\n{e.stdout}\n错误:\n{e.stderr}"
-        return jsonify({'status': 'error', 'message': error_message}), 500
+        return jsonify({"status": "error", "message": error_message}), 500
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # 启动服务器，可以通过 http://127.0.0.1:5000 访问
     app.run(debug=True, port=5000)
