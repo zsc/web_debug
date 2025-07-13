@@ -101,8 +101,8 @@ Please generate the patch file now.
 
         try:
             # 6. (可选但推荐) 运行外部脚本修复 patch
-            # 确保 /usr/local/bin/fix_patch.py 存在且可执行
-            fix_script_path = "/usr/local/bin/fix_patch.py"
+            # 确保 fix_patch.py 存在且可执行
+            fix_script_path = "fix_patch.py"
             if os.path.exists(fix_script_path):
                 logging.info(f"正在运行修复脚本: {fix_script_path}")
                 fix_process = subprocess.run(
