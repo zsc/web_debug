@@ -3,17 +3,11 @@ import subprocess
 import re
 import uuid
 from flask import Flask, request, jsonify, render_template_string
-import google.generativeai as genai
-from google.generativeai import types
+from google import genai
 
 # --- 1. 配置 ---
 # 从环境变量中获取API密钥
-try:
-    api_key = os.environ["GEMINI_API_KEY"]
-    genai.configure(api_key=api_key)
-except KeyError:
-    print("错误: 请设置环境变量 GEMINI_API_KEY")
-    exit()
+client = genai.Client()
 
 # 初始化 Flask 应用
 app = Flask(__name__)
@@ -53,8 +47,8 @@ HTML_TEMPLATE = """
 
             <label for="model">选择 Gemini 模型:</label>
             <select id="model" name="model">
-                <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash (推荐)</option>
-                <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (推荐)</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
             </select>
             
             <label for="prompt">你的修改要求 (Prompt):</label>
@@ -91,6 +85,7 @@ HTML_TEMPLATE = """
                 });
                 
                 const result = await response.json();
+                print(result)
 
                 if (result.status === 'success') {
                     resultContainer.innerHTML = `
@@ -120,7 +115,7 @@ HTML_TEMPLATE = """
                  .replace(/&/g, "&")
                  .replace(/</g, "<")
                  .replace(/>/g, ">")
-                 .replace(/"/g, "\"")
+                 .replace(/"/g, "\\"")
                  .replace(/'/g, "'");
         }
     </script>
@@ -182,27 +177,10 @@ Please generate the patch file now.
 """
 
         # 3. 调用 Gemini API (严格按照指定格式)
-        # 注意: 当前Python SDK的推荐用法是 genai.GenerativeModel(...)
-        # 但我们会严格遵循您请求的参数结构, 将其传入 GenerationConfig。
-        model = genai.GenerativeModel(model_name)
-
-        # 严格遵循请求的参数格式
-        generation_config = types.GenerationConfig(
-            # max_output_tokens=8192, # 可选, 设定一个较大的值
-            temperature=0.3,
-        )
-
-        response = model.generate_content(
+        response = client.models.generate_content(
             contents=full_prompt,
-            generation_config=generation_config,
-            # system_instruction 在新版SDK中通常在模型初始化时设置
-            # model = genai.GenerativeModel(model_name, system_instruction=...)
-            # 为了兼容，我们将其放在这里，并已在上面初始化时设置
+            model = "gemini-2.5-flash",
         )
-        # 在新SDK中，system_instruction通过在初始化时设置来传递
-        # 为了与您提供的代码段精神保持一致，我们构造一个等效的调用
-        # model = genai.GenerativeModel(model_name=model_name, system_instruction=system_instruction)
-        # response = model.generate_content(full_prompt, generation_config=generation_config)
 
         raw_response_text = response.text
 
@@ -230,7 +208,7 @@ Please generate the patch file now.
         try:
             # 6. 运 fix_patch.py
             fix_process = subprocess.run(
-                ["python", "fix_patch.py", temp_patch_filename],
+                ["python3.11", "/usr/local/bin/fix_patch.py", temp_patch_filename],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -272,4 +250,4 @@ Please generate the patch file now.
 
 if __name__ == "__main__":
     # 启动服务器，可以通过 http://127.0.0.1:5000 访问
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5003)
